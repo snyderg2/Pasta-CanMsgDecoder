@@ -166,12 +166,12 @@ def get_msg_metadata_dict(msg_data_tables, debug=False):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-spec', '--can_spec', dest='can_spec', type=str, required=True)
-    parser.add_argument('-pgs', '--spec_pgs', dest='spec_pgs', type=str, required=True)
-    parser.add_argument('-csv_out', '--csv_outfile', dest='csv_outfile', type=str, required=True)
-    parser.add_argument('-parse_f', '--parse_file', dest='parse_file', type=str, required=True)
-    parser.add_argument('-can_ids', '--wanted_can_ids', dest='wanted_can_ids', type=str, default='all', required=False)
-    parser.add_argument('-max_line', '--max_line_cnt', dest='max_line_cnt', type=int, default=0, required=False)
+    parser.add_argument('-spec', '--can_spec', dest='can_spec', type=str, required=True, help="CAN specification that contains how to understand CAN messages")
+    parser.add_argument('-pgs', '--spec_pgs', dest='spec_pgs', type=str, required=True, help="CAN specification pages that contains the table for parsing CAN messages")
+    parser.add_argument('-csv_out', '--csv_outfile', dest='csv_outfile', type=str, required=True, help="csv file for the decoded messages to be put into")
+    parser.add_argument('-parse_f', '--parse_file', dest='parse_file', type=str, required=True, help="log file that is to be parsed by the can decoder")
+    parser.add_argument('-can_ids', '--wanted_can_ids', dest='wanted_can_ids', type=str, default='all', required=False, help="filter for which canids pull from logfile, good for isolating messages. default is all. comma seperated list of id's in hex ej 01A,2BC,321")
+    parser.add_argument('-max_line', '--max_line_cnt', dest='max_line_cnt', type=int, default=0, required=False, help="max line count of log file that will be parsed. default is to parse all")
     return parser.parse_args()
 
 
