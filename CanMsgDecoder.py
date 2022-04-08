@@ -3,6 +3,8 @@ import re
 import argparse
 import matplotlib.pyplot as plt
 import os
+import pandas as pd
+import pickle
 
 class CanMsgMetadata:
     def __init__(self, can_id, io, data_loc, period_ms, description):
@@ -168,17 +170,18 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-spec', '--can_spec', dest='can_spec', type=str, required=True, help="CAN specification that contains how to understand CAN messages")
     parser.add_argument('-pgs', '--spec_pgs', dest='spec_pgs', type=str, required=True, help="CAN specification pages that contains the table for parsing CAN messages")
-    parser.add_argument('-csv_out', '--csv_outfile', dest='csv_outfile', type=str, required=True, help="csv file for the decoded messages to be put into")
+    parser.add_argument('-bin_out', '--bin_outfile', dest='bin_outfile', type=str, required=False, default=None, help="bin file for the dictionary of decoded messages to be put into")
     parser.add_argument('-parse_f', '--parse_file', dest='parse_file', type=str, required=True, help="log file that is to be parsed by the can decoder")
     parser.add_argument('-can_ids', '--wanted_can_ids', dest='wanted_can_ids', type=str, default='all', required=False, help="filter for which canids pull from logfile, good for isolating messages. default is all. comma seperated list of id's in hex ej 01A,2BC,321")
     parser.add_argument('-max_line', '--max_line_cnt', dest='max_line_cnt', type=int, default=0, required=False, help="max line count of log file that will be parsed. default is to parse all")
+    parser.add_argument('-plot', '--plot_data', dest='plot_data', action="store_true", default=False, required=False, help="have plots of the wanted data for the specified duration")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = get_args()
     msg_spec_file = args.can_spec
-    csv_out_file = args.csv_outfile
+    pckl_outfile = args.bin_outfile
     parse_filename = args.parse_file
     filtered_can_ids = list()
     all_can_ids = False
@@ -202,22 +205,33 @@ if __name__ == "__main__":
         for line in parse_file:
             decoded_msg = decoder.decode_msg_str(line)
             can_id = decoded_msg.get_can_id()
+            data = decoded_msg.get_name()
             if all_can_ids or can_id in filtered_can_ids:
                 time_and_values = decoded_msg.get_time_and_values()
                 time_and_values = [time_and_values[0][0], time_and_values[1][0]]
                 if can_id not in graph_dict:
                     graph_dict[can_id] = list()
+                    graph_dict[can_id].append(["time", data])
                 graph_dict[can_id].append(time_and_values)
                 if args.max_line_cnt:
                     count += 1
-                    if count >= 185000:
+                    if count >= args.max_line_cnt:
                         break
 
-    for can_id in graph_dict:
-        title = metadata[can_id].get("description")
-        title = re.search('^((?:\S+\s+){2}\S+)', title).group().strip("()")
-        x, y = zip(*graph_dict[can_id])
-        plt.scatter(x, y)
-        plt.title(title)
-        plt.xlabel("time (seconds)")
+    if pckl_outfile is not None:
+        pickle.dump( graph_dict, open(pckl_outfile, "wb") )
+
+
+    if args.plot_data:
+        for can_id in graph_dict:
+            title = metadata[can_id].get("description")
+            title = re.search('^((?:\S+\s+){2}\S+)', title).group().strip("()")
+            data_list = graph_dict[can_id]
+            legend = data_list.pop(0)
+            df = pd.DataFrame(graph_dict[can_id], columns=["time", "values"])
+            df.set_index("time", drop=True, inplace=True)
+            df.plot(kind='line')
+            #plt.legend(legend)
+            plt.title(legend[-1])
+            print(df)
         plt.show()
