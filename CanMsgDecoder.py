@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 import pickle
+import copy
 
 class CanMsgMetadata:
     def __init__(self, can_id, io, data_loc, period_ms, description):
@@ -170,11 +171,12 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-spec', '--can_spec', dest='can_spec', type=str, required=True, help="CAN specification that contains how to understand CAN messages")
     parser.add_argument('-pgs', '--spec_pgs', dest='spec_pgs', type=str, required=True, help="CAN specification pages that contains the table for parsing CAN messages")
-    parser.add_argument('-bin_out', '--bin_outfile', dest='bin_outfile', type=str, required=False, default=None, help="bin file for the dictionary of decoded messages to be put into")
+    parser.add_argument('-bin_out', '--bin_outfile', dest='bin_outfile', type=str, required=False, default=None, help="bin file for the dictionary of decoded messages to be put into. can be used for loading for machine learning")
     parser.add_argument('-parse_f', '--parse_file', dest='parse_file', type=str, required=True, help="log file that is to be parsed by the can decoder")
     parser.add_argument('-can_ids', '--wanted_can_ids', dest='wanted_can_ids', type=str, default='all', required=False, help="filter for which canids pull from logfile, good for isolating messages. default is all. comma seperated list of id's in hex ej 01A,2BC,321")
     parser.add_argument('-max_line', '--max_line_cnt', dest='max_line_cnt', type=int, default=0, required=False, help="max line count of log file that will be parsed. default is to parse all")
-    parser.add_argument('-plot', '--plot_data', dest='plot_data', action="store_true", default=False, required=False, help="have plots of the wanted data for the specified duration")
+    parser.add_argument('-plot', '--plot_data', dest='plot_data', action="store_true", default=False, required=False, help="show plots of the wanted data for the specified duration")
+    parser.add_argument('-corr', '--print_corr', dest='print_corr', action="store_true", default=False, required=False, help="print tables for pearson and spearman correlations. note: if corr table has nans it is due to no specified can messages existed in log")
     return parser.parse_args()
 
 
@@ -218,8 +220,31 @@ if __name__ == "__main__":
                     if count >= args.max_line_cnt:
                         break
 
+    if args.print_corr:
+        pd.set_option('display.max_columns', len(filtered_can_ids)+1)
+        first_time = True
+        for k, v in graph_dict.items():
+            v_cp = copy.copy(v)
+            time_col_name, col_name = v_cp.pop(0)
+            col_name = str(k) #+ ": " + str(col_name)
+            #time_stamps, values = map(list, zip(*v)) {time_col_name: time_stamps, col_name: values}
+            if first_time:
+                interpolated_df = pd.DataFrame(v_cp, columns=[time_col_name, col_name])
+                first_time = False
+            else:
+                concat_df = pd.DataFrame(v_cp, columns=[time_col_name, col_name])
+                interpolated_df = pd.concat([interpolated_df, concat_df], join="outer", sort=True, ignore_index=True)
+                #interpolated_df = pd.merge_ordered(interpolated_df, concat_df, on=time_col_name, how="outer")
+                #interpolated_df.merge(concat_df, how="outer", on=time_col_name) #pd.concat([interpolated_df, concat_df], join="outer", sort=True) #interpolated_df.join(concat_df) #pd.concat([interpolated_df, concat_df])
+        interpolated_df[:1] = interpolated_df[:1].fillna(0)
+        interpolated_df = interpolated_df.interpolate().set_index(time_col_name)
+        spearman_df = interpolated_df.corr(method="spearman")
+        print("spearman corr\n{}\n".format(spearman_df))
+        pearson_df = interpolated_df.corr(method="pearson")
+        print("pearson corr\n{}\n".format(pearson_df))
+
     if pckl_outfile is not None:
-        pickle.dump( graph_dict, open(pckl_outfile, "wb") )
+        pickle.dump(graph_dict, open(pckl_outfile, "wb"))
 
 
     if args.plot_data:
@@ -231,7 +256,5 @@ if __name__ == "__main__":
             df = pd.DataFrame(graph_dict[can_id], columns=["time", "values"])
             df.set_index("time", drop=True, inplace=True)
             df.plot(kind='line')
-            #plt.legend(legend)
             plt.title(legend[-1])
-            print(df)
         plt.show()
